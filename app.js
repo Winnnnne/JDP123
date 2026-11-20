@@ -3,7 +3,7 @@ const D=window.JP_DATA;
 const $=s=>document.querySelector(s);
 const JP_RE=/[ぁ-んァ-ン一-龯]/;
 const VI_RE=/[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]/i;
-const freshState=(o={})=>({unit:null,type:null,mode:null,idx:0,flipped:false,quiz:null,...o});
+const freshState=(o={})=>{if(typeof spStopAll==='function')spStopAll();return {unit:null,type:null,mode:null,idx:0,flipped:false,quiz:null,...o}};
 let state=freshState();
 let grammarType='mix'; // mix | topic | trans | blankmc | blanktype
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -17,7 +17,7 @@ const uniq=a=>[...new Set(a)];
 /* ───────── Điều hướng ───────── */
 function showHome(){state=freshState();renderHome();scrollTo(0,0)}
 function renderHome(){
-  $('#app').innerHTML=`<section class="hero"><h1>日本語 学習</h1><p>Học tiếng Nhật theo Bài 4–7 • Từ vựng · Kanji · Ngữ pháp</p></section>
+  $('#app').innerHTML=`<section class="hero"><h1>日本語 学習</h1><p>Học tiếng Nhật theo Bài 4–7 • Từ vựng · Kanji · Ngữ pháp · Speaking</p><div class="sp-hero"><button class="action sp-hero-btn" onclick="showSpeakHub()">🎤 Speaking — nghe câu hỏi · gợi ý từ khóa · thi thử · luyện đọc</button></div></section>
   <div class="unit-grid">${D.units.map(u=>`
   <article class="unit-card"><h2>Bài ${u.id}</h2><div class="sub">${u.vocabCount} từ vựng · ${u.kanjiCount} Kanji · ${u.grammarCount} chủ đề</div>
     <div class="module pink"><div class="module-title">📖 Từ vựng</div><div class="module-buttons">
@@ -26,6 +26,8 @@ function renderHome(){
       <button class="action" onclick="openModule(${u.id},'kanji','list')">Danh sách</button><button class="action" onclick="openModule(${u.id},'kanji','flash')">Flashcard</button><button class="action purple" onclick="openModule(${u.id},'kanji','quiz')">Kiểm tra</button></div></div>
     <div class="module blue"><div class="module-title">⚖️ Ngữ pháp</div><div class="module-buttons">
       <button class="action blue" onclick="openModule(${u.id},'grammar','view')">Xem Ngữ pháp</button><button class="action" onclick="openModule(${u.id},'grammar','quiz')">Kiểm tra</button></div></div>
+    <div class="module orange"><div class="module-title">🎤 Speaking</div><div class="module-buttons">
+      <button class="action sp-btn" onclick="openSpeak('qa',${u.id})">Nghe – nói</button><button class="action" onclick="openSpeak('exam',${u.id})">Thi thử</button></div></div>
   </article>`).join('')}</div>`;
 }
 function openModule(unit,type,mode){state=freshState({unit,type,mode});renderModule();scrollTo(0,0)}
@@ -78,7 +80,8 @@ function prevCard(){const n=dataFor().length;if(!n)return;state.idx=(state.idx-1
 function speakCard(){
   const rows=dataFor(),x=rows[state.idx%rows.length]; if(!x)return;
   const text=state.type==='kanji'?(x.kanji||x.hiragana):(x.japanese||x.kanji);
-  if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.cancel();speechSynthesis.speak(u)}
+  if(typeof ttsSpeak==='function')ttsSpeak(text,{rate:1});
+  else if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.cancel();speechSynthesis.speak(u)}
 }
 
 /* ───────── Ngữ pháp: tách câu ví dụ từ dữ liệu thô ───────── */
@@ -393,6 +396,7 @@ document.addEventListener('keydown',e=>{
   }
   const onBtn=tag==='BUTTON'||tag==='A',k=e.key;
   if((k==='Enter'||k===' ')&&onBtn)return; // để nút đang focus tự xử lý click
+  if(state.type==='speak'){if(typeof speakKey==='function'&&speakKey(e))e.preventDefault();return}
   if(state.mode==='flash'){
     if(k==='ArrowRight'){e.preventDefault();nextCard()}
     else if(k==='ArrowLeft'){e.preventDefault();prevCard()}
