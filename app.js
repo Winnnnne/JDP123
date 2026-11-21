@@ -17,7 +17,7 @@ const uniq=a=>[...new Set(a)];
 /* ───────── Điều hướng ───────── */
 function showHome(){state=freshState();renderHome();scrollTo(0,0)}
 function renderHome(){
-  $('#app').innerHTML=`<section class="hero"><h1>日本語 学習</h1><p>Học tiếng Nhật theo Bài 4–7 • Từ vựng · Kanji · Ngữ pháp · Speaking</p><div class="sp-hero"><button class="action sp-hero-btn" onclick="showSpeakHub()">🎤 Speaking — nghe câu hỏi · gợi ý từ khóa · thi thử · luyện đọc</button></div></section>
+  $('#app').innerHTML=`<section class="hero"><h1>日本語 学習</h1><p>Học tiếng Nhật theo Bài 4–7 • Từ vựng · Kanji · Ngữ pháp · Từ loại · Speaking</p><div class="sp-hero"><button class="action sp-hero-btn" onclick="showSpeakHub()">🎤 Speaking — nghe câu hỏi · gợi ý từ khóa · thi thử · luyện đọc</button> <button class="action sp-hero-btn pos-hero-btn" onclick="showPosHub()">📚 Từ loại — kiểm tra theo danh từ · động từ · tính từ</button></div></section>
   <div class="unit-grid">${D.units.map(u=>`
   <article class="unit-card"><h2>Bài ${u.id}</h2><div class="sub">${u.vocabCount} từ vựng · ${u.kanjiCount} Kanji · ${u.grammarCount} chủ đề</div>
     <div class="module pink"><div class="module-title">📖 Từ vựng</div><div class="module-buttons">
@@ -33,12 +33,14 @@ function renderHome(){
 function openModule(unit,type,mode){state=freshState({unit,type,mode});renderModule();scrollTo(0,0)}
 function backUnit(){showHome()}
 function dataFor(){
+  if(state.type==='pos')return posItems();
   if(state.type==='vocab')return D.vocab.filter(x=>x.unit===state.unit);
   if(state.type==='kanji')return D.kanji.filter(x=>x.unit===state.unit);
   return D.grammar[String(state.unit)].sections;
 }
 function titleFor(){return state.type==='vocab'?'Từ vựng':state.type==='kanji'?'Kanji':'Ngữ pháp'}
 function renderModule(){
+  if(state.type==='pos'){renderPos();return}
   const u=unitObj(state.unit);
   $('#app').innerHTML=`<div class="page-head"><div><button class="back" onclick="backUnit()">← Danh sách bài</button></div><div><h1>Bài ${u.id} · ${titleFor()}</h1><div class="stats">${u.vocabCount} từ vựng · ${u.kanjiCount} Kanji · ${u.grammarCount} chủ đề</div></div><div></div></div>${moduleBody()}`;
   const fi=$('#fillInput'); if(fi&&!fi.disabled)fi.focus();
@@ -63,9 +65,9 @@ function grammarView(){const secs=dataFor();return `<div class="section-grid">${
 function flashItems(){return state.type==='grammar'?[]:dataFor()}
 function flashView(){
   const rows=flashItems(); if(!rows.length)return '<div class="empty">Chưa có flashcard.</div>';
-  const n=rows.length,i=state.idx%n,x=rows[i],isK=state.type==='kanji';
-  const front=isK?(x.kanji||x.hiragana||x.hanviet):(x.japanese||x.kanji);
-  const back=isK?`${esc(x.hanviet||'')} · ${esc(x.hiragana||'')}<br><span class="muted">${esc(x.meaning||'')}</span>`:`${esc(x.meaning||'')}<div class="romaji">${esc(x.romaji||'')}</div>`;
+  const n=rows.length,i=state.idx%n,x=rows[i],isK=state.type==='kanji',isP=state.type==='pos';
+  const front=isP?x.w:isK?(x.kanji||x.hiragana||x.hanviet):(x.japanese||x.kanji);
+  const back=isP?posBack(x):isK?`${esc(x.hanviet||'')} · ${esc(x.hiragana||'')}<br><span class="muted">${esc(x.meaning||'')}</span>`:`${esc(x.meaning||'')}<div class="romaji">${esc(x.romaji||'')}</div>`;
   return `<div class="flash-wrap"><div><div class="flash ${state.flipped?'flipped':''}" onclick="flipCard()"><div class="flash-inner"><div class="face"><div class="jp-big">${esc(front||'—')}</div><div class="muted">Nhấn để lật thẻ</div></div><div class="face backface"><div class="meaning">${back}</div></div></div></div>
   <div class="toolbar" style="justify-content:center"><button class="pill" onclick="prevCard()">← Trước</button><button class="pill" onclick="nextCard()">Tiếp →</button><button class="pill" onclick="speakCard()">🔊 Phát âm</button></div></div>
   <aside class="flash-side"><strong>Thẻ ${i+1}/${n}</strong><div style="margin:10px 0" class="progress-bar"><div style="width:${(i+1)/n*100}%"></div></div><div class="muted">Lật thẻ để xem nghĩa. Dùng nút phát âm để nghe tiếng Nhật bằng giọng hệ thống.</div>
@@ -79,7 +81,7 @@ function nextCard(){const n=dataFor().length;if(!n)return;state.idx=(state.idx+1
 function prevCard(){const n=dataFor().length;if(!n)return;state.idx=(state.idx-1+n)%n;state.flipped=false;renderModule()}
 function speakCard(){
   const rows=dataFor(),x=rows[state.idx%rows.length]; if(!x)return;
-  const text=state.type==='kanji'?(x.kanji||x.hiragana):(x.japanese||x.kanji);
+  const text=state.type==='pos'?x.say:state.type==='kanji'?(x.kanji||x.hiragana):(x.japanese||x.kanji);
   if(typeof ttsSpeak==='function')ttsSpeak(text,{rate:1});
   else if('speechSynthesis'in window){const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.cancel();speechSynthesis.speak(u)}
 }
@@ -267,6 +269,7 @@ const curQ=()=>state.quiz&&state.quiz.questions[state.quiz.pos];
 /* Số câu hỏi: nhớ lựa chọn của người dùng, giới hạn tối đa 50 và theo số nội dung không trùng hiện có */
 let quizCount=(()=>{try{return JSON.parse(localStorage.getItem('quizCount'))||{}}catch(e){return {}}})();
 function quizCap(kind){
+  if(kind==='pos')return posQuizCap();
   if(kind==='grammar')return grammarCapacity(state.unit,grammarType);
   return Math.min(50,uniqueItems(kind,dataFor()).length);
 }
@@ -279,7 +282,7 @@ function setQuizCount(kind,v){
 }
 function quizControls(kind){
   const cap=quizCap(kind),min=quizMin(kind),n=quizN(kind);
-  const note=kind==='grammar'&&grammarType==='mix'?'Chia đều 4 dạng · không trùng nội dung':'Không trùng nội dung';
+  const note=kind==='grammar'&&grammarType==='mix'?'Chia đều 4 dạng · không trùng nội dung':kind==='pos'&&posType==='mix'?'Chia đều các dạng · mỗi từ hỏi 1 lần':kind==='pos'?'Mỗi từ hỏi 1 lần':'Không trùng nội dung';
   return `<div class="quiz-count"><label for="qCount">Số câu</label><input id="qCount" type="range" min="${min}" max="${cap}" value="${n}" ${cap<=min?'disabled':''} oninput="document.getElementById('qVal').textContent=this.value" onchange="setQuizCount('${kind}',this.value)"><b id="qVal">${n}</b><span class="muted">tối đa ${cap} · ${note}</span></div>`;
 }
 function gtypeBar(){
@@ -289,7 +292,7 @@ function gtypeBar(){
 function setGrammarType(k){grammarType=k;startQuiz('grammar')}
 function quizView(kind){
   if(!state.quiz||state.quiz.kind!==kind)startQuiz(kind,true);
-  const q=state.quiz,bar=(kind==='grammar'?gtypeBar():'')+quizControls(kind);
+  const q=state.quiz,bar=(kind==='grammar'?gtypeBar():kind==='pos'?posTypeBar():'')+quizControls(kind);
   if(!q.total)return `<div class="quiz">${bar}<div class="empty">Chưa đủ dữ liệu để tạo câu hỏi dạng này.</div></div>`;
   if(q.done)return `<div class="quiz">${bar}<div class="quiz-card result"><div class="score-big">${q.score}/${q.total}</div><h2>Hoàn thành!</h2><p class="muted">Bạn có thể làm lại để luyện tiếp.</p><div class="toolbar" style="justify-content:center"><button class="action" onclick="prevQuiz()">← Xem lại câu cuối</button><button class="action primary" onclick="startQuiz('${kind}')">Làm lại</button></div><div class="kbd-hint"><kbd>←</kbd> Xem lại · <kbd>Enter</kbd> Làm lại</div></div></div>`;
   const qq=q.questions[q.pos];
@@ -302,16 +305,16 @@ function quizView(kind){
     }).join('')}</div>`;
   }else{
     const cls=qq.answered?(qq.ok?' correct':' wrong'):'';
-    body=`<div class="fill-row"><input id="fillInput" class="fill-input${cls}" value="${esc(qq.userText)}" ${qq.answered?'disabled':''} placeholder="Nhập trợ từ (vd: は, を, に…)" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="8"><button class="action primary" ${qq.answered?'disabled':''} onclick="submitFill()">Kiểm tra</button></div>${qq.answered?'':'<div class="muted" style="margin-top:8px;font-size:13px">Gõ bằng hiragana hoặc romaji (wa, ga, wo, ni, de, e, to, mo, no, kara, made, yori).</div>'}`;
+    body=`<div class="fill-row"><input id="fillInput" class="fill-input${cls}" value="${esc(qq.userText)}" ${qq.answered?'disabled':''} placeholder="${esc(qq.ph||'Nhập trợ từ (vd: は, を, に…)')}" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="${qq.maxlen||8}"><button class="action primary" ${qq.answered?'disabled':''} onclick="submitFill()">Kiểm tra</button></div>${qq.answered?'':`<div class="muted" style="margin-top:8px;font-size:13px">${esc(qq.hint||'Gõ bằng hiragana hoặc romaji (wa, ga, wo, ni, de, e, to, mo, no, kara, made, yori).')}</div>`}`;
   }
   const right=qq.type==='mc'?qq.correct:qq.answer;
   const fb=qq.answered?`<div class="feedback ${qq.ok?'ok':'bad'}" id="feedback"><div class="verdict">${qq.ok?'✓ Đúng rồi!':'✗ Sai rồi'}</div>${qq.ok?'':`<div class="right-answer">Đáp án đúng: <b>${esc(right)}</b></div>`}<div class="explain">${qq.explain}</div></div>`:'';
   const nav=`<div class="toolbar quiz-nav">${q.pos>0?`<button class="action" onclick="prevQuiz()">← Câu trước</button>`:''}${qq.answered?`<button class="action primary" onclick="nextQuiz()">${q.pos+1===q.total?'Xem kết quả':'Câu tiếp theo →'}</button>`:''}</div>`;
-  const hint=`<div class="kbd-hint">${qq.type==='mc'?'<kbd>1</kbd>–<kbd>4</kbd> Chọn đáp án · ':'<kbd>Enter</kbd> Kiểm tra · '}<kbd>→</kbd> / <kbd>Enter</kbd> Câu tiếp · <kbd>←</kbd> Câu trước</div>`;
-  return `<div class="quiz">${bar}<div class="quiz-card"><div class="q-label">Câu ${q.pos+1}/${q.total} · ${esc(qq.label)}</div><div class="question">${qq.html}</div>${fb}${body}${nav}${hint}</div></div>`;
+  const hint=`<div class="kbd-hint">${qq.audio?'<kbd>Space</kbd> Nghe lại · ':''}${qq.type==='mc'?'<kbd>1</kbd>–<kbd>4</kbd> Chọn đáp án · ':'<kbd>Enter</kbd> Kiểm tra · '}<kbd>→</kbd> / <kbd>Enter</kbd> Câu tiếp · <kbd>←</kbd> Câu trước</div>`;
+  return `<div class="quiz">${bar}<div class="quiz-card"><div class="q-label">Câu ${q.pos+1}/${q.total} · ${esc(qq.label)}</div><div class="question">${qq.html}</div>${qq.audio?`<div class="sp-q-top" style="margin-bottom:14px"><button class="sp-play" onclick="qPlayAudio()">🔊 Nghe lại</button><button class="pill" onclick="ttsSpeak(curQ().audio,{rate:0.6})">🐢 Nghe chậm</button></div>`:''}${fb}${body}${nav}${hint}</div></div>`;
 }
 function startQuiz(kind,silent){
-  const n=quizN(kind),questions=kind==='grammar'?buildGrammar(state.unit,grammarType,n):buildSimple(kind,n);
+  const n=quizN(kind),questions=kind==='grammar'?buildGrammar(state.unit,grammarType,n):kind==='pos'?buildPos(n):buildSimple(kind,n);
   state.quiz={kind,questions,total:questions.length,pos:0,score:0,done:false};
   if(!silent)renderModule();
 }
@@ -323,7 +326,7 @@ function answerQuiz(i){
 function submitFill(){
   const q=state.quiz,qq=curQ(),fi=$('#fillInput'); if(!qq||qq.answered||qq.type!=='fill'||!fi)return;
   const v=fi.value; if(!v.trim()){fi.focus();return}
-  qq.answered=true;qq.userText=v;qq.ok=fillOk(v,qq.answer); if(qq.ok)q.score++;
+  qq.answered=true;qq.userText=v;qq.ok=qq.check?qq.check(v):fillOk(v,qq.answer); if(qq.ok)q.score++;
   renderModule();
 }
 function nextQuiz(){
@@ -337,7 +340,7 @@ function prevQuiz(){
   renderModule();
 }
 function saveBest(){
-  try{const key=`best_${state.unit}_${state.type}`;const old=Number(localStorage.getItem(key)||0);localStorage.setItem(key,String(Math.max(old,state.quiz.score)))}catch(e){}
+  try{const key=state.type==='pos'?`best_pos_${state.cat}`:`best_${state.unit}_${state.type}`;const old=Number(localStorage.getItem(key)||0);localStorage.setItem(key,String(Math.max(old,state.quiz.score)))}catch(e){}
 }
 
 /* ───────── Tiến độ / Tìm kiếm ───────── */
@@ -345,7 +348,9 @@ function showStats(){
   state=freshState();
   const get=k=>{try{return Number(localStorage.getItem(k)||0)}catch(e){return 0}};
   const list=D.units.map(u=>{const a=['vocab','kanji','grammar'].map(t=>get(`best_${u.id}_${t}`));return `<div class="result-card"><b>Bài ${u.id}</b><div class="muted">Từ vựng: ${a[0]} · Kanji: ${a[1]} · Ngữ pháp: ${a[2]}</div></div>`}).join('');
-  $('#app').innerHTML=`<div class="page-head"><button class="back" onclick="showHome()">← Về trang chủ</button><div><h1>Tiến độ</h1><div class="stats">Điểm cao nhất được lưu trên trình duyệt này</div></div><div></div></div><div class="search-results">${list}</div>`;scrollTo(0,0);
+  const posList2=(typeof PD!=='undefined'?[...PD.cats.map(c=>[c.id,c.icon+' '+c.title]),['all','📚 Tất cả']]:[]).map(([id,t])=>`${t}: ${get('best_pos_'+id)}`).join(' · ');
+  const posCard=posList2?`<div class="result-card"><b>Từ loại</b><div class="muted">${posList2}</div></div>`:'';
+  $('#app').innerHTML=`<div class="page-head"><button class="back" onclick="showHome()">← Về trang chủ</button><div><h1>Tiến độ</h1><div class="stats">Điểm cao nhất được lưu trên trình duyệt này</div></div><div></div></div><div class="search-results">${list}${posCard}</div>`;scrollTo(0,0);
 }
 function toggleSearch(){const el=$('#searchBar');el.classList.toggle('hidden');if(!el.classList.contains('hidden'))$('#searchInput').focus()}
 function closeSearch(){const el=$('#searchBar');if(el.classList.contains('hidden'))return false;el.classList.add('hidden');$('#searchInput').value='';showHome();return true}
@@ -356,9 +361,10 @@ function renderSearch(term){
   for(const x of D.vocab){const hay=[x.japanese,x.romaji,x.meaning,x.kanji].join(' ').toLowerCase();if(hay.includes(t))res.push({type:'Từ vựng',unit:x.unit,title:x.japanese||x.kanji,sub:`${x.romaji||''} · ${x.meaning||''}`})}
   for(const x of D.kanji){const hay=[x.kanji,x.hanviet,x.hiragana,x.meaning].join(' ').toLowerCase();if(hay.includes(t))res.push({type:'Kanji',unit:x.unit,title:x.kanji||x.hanviet,sub:`${x.hanviet||''} · ${x.hiragana||''} · ${x.meaning||''}`})}
   for(const [u,g] of Object.entries(D.grammar)){for(const s of g.sections){const hay=[s.title,...s.lines].join(' ').toLowerCase();if(hay.includes(t))res.push({type:'Ngữ pháp',unit:Number(u),title:s.title,sub:s.lines.find(x=>JP_RE.test(x))||s.lines[0]||''})}}
-  $('#app').innerHTML=`<div class="page-head"><div><h1>Kết quả tìm kiếm</h1><div class="stats">${res.length} kết quả</div></div><button class="back" onclick="showHome()">← Về trang chủ</button><div></div></div><div class="search-results">${res.length?res.slice(0,80).map(r=>`<div class="result-card" onclick="openSearchResult('${r.type}',${r.unit})"><b>${esc(r.title)}</b><div class="muted">${esc(r.type)} · Bài ${r.unit}</div><div>${esc(r.sub)}</div></div>`).join(''):'<div class="empty">Không tìm thấy.</div>'}</div>`;
+  if(typeof PD!=='undefined')for(const x of posAll('all')){const hay=[x.w,x.vi,x.ro,x.te||'',x.say].join(' ').toLowerCase();if(hay.includes(t))res.push({type:'Từ loại',unit:x.u[0]||0,cat:x.cat,title:x.w+(x.te?' → '+x.te:''),sub:`${x.ro} · ${x.vi}`})}
+  $('#app').innerHTML=`<div class="page-head"><div><h1>Kết quả tìm kiếm</h1><div class="stats">${res.length} kết quả</div></div><button class="back" onclick="showHome()">← Về trang chủ</button><div></div></div><div class="search-results">${res.length?res.slice(0,80).map(r=>`<div class="result-card" onclick="openSearchResult('${r.type}',${r.unit},'${r.cat||''}')"><b>${esc(r.title)}</b><div class="muted">${esc(r.type)}${r.cat?'':' · Bài '+r.unit}</div><div>${esc(r.sub)}</div></div>`).join(''):'<div class="empty">Không tìm thấy.</div>'}</div>`;
 }
-function openSearchResult(type,unit){if(type==='Từ vựng'||type==='Kanji')openModule(unit,type==='Từ vựng'?'vocab':'kanji','list');else openModule(unit,'grammar','view')}
+function openSearchResult(type,unit,cat){if(type==='Từ loại'){openPos(cat,'list');return}if(type==='Từ vựng'||type==='Kanji')openModule(unit,type==='Từ vựng'?'vocab':'kanji','list');else openModule(unit,'grammar','view')}
 
 /* ───────── Phím tắt toàn trang ─────────
    Flashcard : ← Trước · → Tiếp · Space/Enter/↑/↓ lật thẻ · P phát âm
@@ -374,6 +380,7 @@ function quizKey(e){
   const qq=curQ(); if(!qq)return false;
   if(k==='ArrowLeft'){if(q.pos>0){prevQuiz();return true}return false}
   if(k==='ArrowRight'){if(qq.answered){nextQuiz();return true}return false}
+  if(qq.audio&&!qq.answered&&(k===' '||k==='p'||k==='P')){qPlayAudio();return true}
   if(k==='Enter'||k===' '){
     if(qq.answered){nextQuiz();return true}
     if(qq.type==='fill'){const fi=$('#fillInput');if(fi){fi.focus();return true}}
